@@ -270,7 +270,7 @@ impl FromStr for Keyword {
     type Err = ParseKeywordError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.trim_right() {
+        match s.trim_end() {
             "AV" => Ok(Keyword::AV),
             "BITPIX" => Ok(Keyword::BITPIX),
             "CAMPAIGN" => Ok(Keyword::CAMPAIGN),
@@ -342,7 +342,7 @@ impl FromStr for Keyword {
                 let t_type_constructor = Keyword::TTYPEn;
                 let t_unit_constructor = Keyword::TUNITn;
                 let t_zero_constructor = Keyword::TZEROn;
-                let tuples: Vec<(&str, &(Fn(u16) -> Keyword))> = vec!(
+                let tuples: Vec<(&str, &(dyn Fn(u16) -> Keyword))> = vec!(
                     ("TDIM", &t_dim_constructor),
                     ("TDISP", &t_disp_constructor),
                     ("TFORM", &t_form_constructor),
@@ -377,11 +377,11 @@ trait KeywordSpecialCase {
 
 struct PrefixedKeyword<'a> {
     prefix: &'a str,
-    constructor: &'a (Fn(u16) -> Keyword),
+    constructor: &'a (dyn Fn(u16) -> Keyword),
 }
 
 impl<'a> PrefixedKeyword<'a> {
-    fn new(prefix: &'a str, constructor: &'a (Fn(u16) -> Keyword)) -> PrefixedKeyword<'a> {
+    fn new(prefix: &'a str, constructor: &'a (dyn Fn(u16) -> Keyword)) -> PrefixedKeyword<'a> {
         PrefixedKeyword { prefix: prefix, constructor: constructor }
     }
 }
