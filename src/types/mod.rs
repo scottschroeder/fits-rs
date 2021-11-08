@@ -1,7 +1,7 @@
 //! The types modules describes all the structures to express FITS files.
 
+use std::fmt::{Display, Error, Formatter};
 use std::str::FromStr;
-use std::fmt::{Display, Formatter, Error};
 
 /// Representation of a FITS file.
 #[derive(Debug, PartialEq)]
@@ -34,7 +34,10 @@ pub struct HDU<'a> {
 impl<'a> HDU<'a> {
     /// Create an HDU with a header, setting the data_array to none.
     pub fn new(header: Header<'a>) -> HDU<'a> {
-        HDU { header: header, data_array: Option::None }
+        HDU {
+            header: header,
+            data_array: Option::None,
+        }
     }
 }
 
@@ -42,21 +45,23 @@ impl<'a> HDU<'a> {
 #[derive(Debug, PartialEq)]
 pub struct Header<'a> {
     /// The keyword records of the primary header.
-    pub keyword_records: Vec<KeywordRecord<'a>>,
+    pub keyword_records: Vec<ValueRecord<'a>>,
 }
 
 impl<'a> Header<'a> {
     /// Create a Header with a given set of keyword_records
-    pub fn new(keyword_records: Vec<KeywordRecord<'a>>) -> Header<'a> {
-        Header { keyword_records: keyword_records }
+    pub fn new(keyword_records: Vec<ValueRecord<'a>>) -> Header<'a> {
+        Header {
+            keyword_records: keyword_records,
+        }
     }
 
     /// Determines the size in bits of the data array following this header.
     pub fn data_array_size(&self) -> usize {
         if self.is_primary() {
-            lmle(self.primary_data_array_size(), 2880*8)
+            lmle(self.primary_data_array_size(), 2880 * 8)
         } else {
-            lmle(self.extention_data_array_size(), 2880*8)
+            lmle(self.extention_data_array_size(), 2880 * 8)
         }
     }
 
@@ -67,28 +72,34 @@ impl<'a> Header<'a> {
     fn has_keyword_record(&self, keyword: &Keyword) -> bool {
         for keyword_record in &self.keyword_records {
             if *keyword == keyword_record.keyword {
-                return true
+                return true;
             }
         }
         false
     }
 
     fn primary_data_array_size(&self) -> usize {
-        (self.integer_value_of(&Keyword::BITPIX).unwrap_or(0i64).abs() * self.naxis_product()) as usize
+        (self
+            .integer_value_of(&Keyword::BITPIX)
+            .unwrap_or(0i64)
+            .abs()
+            * self.naxis_product()) as usize
     }
 
     fn extention_data_array_size(&self) -> usize {
-        (self.integer_value_of(&Keyword::BITPIX).unwrap_or(0i64).abs() *
-         self.integer_value_of(&Keyword::GCOUNT).unwrap_or(1i64) *
-         (self.integer_value_of(&Keyword::PCOUNT).unwrap_or(0i64) + self.naxis_product())) as usize
+        (self
+            .integer_value_of(&Keyword::BITPIX)
+            .unwrap_or(0i64)
+            .abs()
+            * self.integer_value_of(&Keyword::GCOUNT).unwrap_or(1i64)
+            * (self.integer_value_of(&Keyword::PCOUNT).unwrap_or(0i64) + self.naxis_product()))
+            as usize
     }
 
     fn integer_value_of(&self, keyword: &Keyword) -> Result<i64, ValueRetrievalError> {
-        self.value_of(keyword).and_then(|value| {
-            match value {
-                Value::Integer(n) => Ok(n),
-                _ => Err(ValueRetrievalError::NotAnInteger),
-            }
+        self.value_of(keyword).and_then(|value| match value {
+            Value::Integer(n) => Ok(n),
+            _ => Err(ValueRetrievalError::NotAnInteger),
         })
     }
 
@@ -96,7 +107,7 @@ impl<'a> Header<'a> {
         if self.has_keyword_record(&keyword) {
             for keyword_record in &self.keyword_records {
                 if keyword_record.keyword == *keyword {
-                    return Ok(keyword_record.value.clone())
+                    return Ok(keyword_record.value.clone());
                 }
             }
         }
@@ -109,7 +120,8 @@ impl<'a> Header<'a> {
             let mut product = 1i64;
             for n in 0..limit {
                 let naxisn = Keyword::NAXISn((n + 1i64) as u16);
-                product *= self.integer_value_of(&naxisn)
+                product *= self
+                    .integer_value_of(&naxisn)
                     .expect(format!("NAXIS{} should be defined", n).as_str());
             }
             product
@@ -134,28 +146,89 @@ pub enum ValueRetrievalError {
 #[derive(Debug, PartialEq)]
 pub struct DataArray;
 
-/// A keyword record contains information about a FITS header. It consists of a
+/// A value record contains information about a FITS header.
+/// It maps to one of several types of header records
+#[derive(Debug, PartialEq)]
+pub enum KeywordRecord<'a> {
+    /// A `ValueRecord` that maps a keyword to a value
+    ValueRecord(ValueRecord<'a>),
+    /// A `CommentaryRecord` that contains text data
+    CommentaryRecord(CommentaryRecord<'a>),
+    /// A terminal record, indicating the end of a section
+    EndRecord,
+    /// A placeholder for blank records
+    BlankRecord,
+}
+
+impl<'a> Display for KeywordRecord<'a> {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        match self {
+            KeywordRecord::ValueRecord(v) => write!(f, "{}", v),
+            KeywordRecord::CommentaryRecord(c) => write!(f, "{}", c),
+            KeywordRecord::EndRecord => write!(f, "END"),
+            KeywordRecord::BlankRecord => write!(f, ""),
+        }
+    }
+}
+
+/// A value record contains information about a FITS header. It consists of a
 /// keyword, the corresponding value and an optional comment.
 #[derive(Debug, PartialEq)]
-pub struct KeywordRecord<'a> {
+pub struct ValueRecord<'a> {
     /// The keyword of this record.
     keyword: Keyword,
     /// The value of this record.
     value: Value<'a>,
     /// The comment of this record.
-    comment: Option<&'a str>
+    comment: Option<&'a str>,
 }
 
-impl<'a> KeywordRecord<'a> {
+impl<'a> ValueRecord<'a> {
     /// Create a `KeywordRecord` from a specific `Keyword`.
-    pub fn new(keyword: Keyword, value: Value<'a>, comment: Option<&'a str>) -> KeywordRecord<'a> {
-        KeywordRecord { keyword: keyword, value: value, comment: comment }
+    pub fn new(keyword: Keyword, value: Value<'a>, comment: Option<&'a str>) -> ValueRecord<'a> {
+        ValueRecord {
+            keyword: keyword,
+            value: value,
+            comment: comment,
+        }
     }
 }
 
-impl<'a> Display for KeywordRecord<'a> {
+impl<'a> Display for ValueRecord<'a> {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
-        write!(f, "{:?}= {:?}/{}", self.keyword, self.value, self.comment.unwrap_or(""))
+        write!(
+            f,
+            "{}= {:?}/{}",
+            self.keyword,
+            self.value,
+            self.comment.unwrap_or("")
+        )
+    }
+}
+
+/// A commentary record contains information about a FITS header. It consists of a
+/// keyword, the corresponding commentary and an optional comment.
+#[derive(Debug, PartialEq)]
+pub struct CommentaryRecord<'a> {
+    /// The keyword of this record.
+    keyword: Keyword,
+    /// The comment of this record.
+    commentary: Option<&'a str>,
+}
+
+impl<'a> CommentaryRecord<'a> {
+    /// Create a `KeywordRecord` from a specific `Keyword`.
+    pub fn new(keyword: Keyword, commentary: Option<&'a str>) -> CommentaryRecord<'a> {
+        CommentaryRecord {
+            keyword: keyword,
+            commentary: commentary,
+        }
+    }
+}
+
+impl<'a> Display for CommentaryRecord<'a> {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        write!(f, "{} {}", self.keyword, self.commentary.unwrap_or(""))
     }
 }
 
@@ -168,6 +241,8 @@ pub enum Value<'a> {
     Logical(bool),
     /// An optionally signed decimal integer.
     Integer(i64),
+    /// Complex integer represented by a real and imaginary component.
+    ComplexInteger((i64, i64)),
     /// Fixed format real floating point number.
     Real(f64),
     /// Complex number represented by a real and imaginary component.
@@ -175,10 +250,6 @@ pub enum Value<'a> {
     /// When a value is not present
     Undefined,
 }
-
-/// A unit struct that will act as a placeholder for blank records.
-#[derive(Debug, PartialEq)]
-pub struct BlankRecord;
 
 /// The various keywords that can be found in headers.
 #[derive(Debug, PartialEq)]
@@ -189,6 +260,7 @@ pub enum Keyword {
     CAMPAIGN,
     CHANNEL,
     CHECKSUM,
+    COMMENT,
     CREATOR,
     DATASUM,
     DATA_REL,
@@ -208,6 +280,7 @@ pub enum Keyword {
     GLON,
     GMAG,
     GRCOLOR,
+    HISTORY,
     HMAG,
     IMAG,
     INSTRUME,
@@ -254,7 +327,16 @@ pub enum Keyword {
     TZEROn(u16),
     XTENSION,
     ZMAG,
-    Unprocessed, // TODO Remove the unprocessed keyword
+    Unrecognized(String), // TODO Remove the unprocessed keyword
+}
+
+impl Display for Keyword {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Keyword::Unrecognized(k) => write!(f, "{}", k),
+            _ => write!(f, "{:?}", self)
+        }
+    }
 }
 
 /// Problems that could occur when parsing a `str` for a Keyword are enumerated here.
@@ -276,6 +358,7 @@ impl FromStr for Keyword {
             "CAMPAIGN" => Ok(Keyword::CAMPAIGN),
             "CHANNEL" => Ok(Keyword::CHANNEL),
             "CHECKSUM" => Ok(Keyword::CHECKSUM),
+            "COMMENT" => Ok(Keyword::COMMENT),
             "CREATOR" => Ok(Keyword::CREATOR),
             "DATASUM" => Ok(Keyword::DATASUM),
             "DATA_REL" => Ok(Keyword::DATA_REL),
@@ -295,6 +378,7 @@ impl FromStr for Keyword {
             "GLON" => Ok(Keyword::GLON),
             "GMAG" => Ok(Keyword::GMAG),
             "GRCOLOR" => Ok(Keyword::GRCOLOR),
+            "HISTORY" => Ok(Keyword::HISTORY),
             "HMAG" => Ok(Keyword::HMAG),
             "IMAG" => Ok(Keyword::IMAG),
             "INSTRUME" => Ok(Keyword::INSTRUME),
@@ -342,7 +426,7 @@ impl FromStr for Keyword {
                 let t_type_constructor = Keyword::TTYPEn;
                 let t_unit_constructor = Keyword::TUNITn;
                 let t_zero_constructor = Keyword::TZEROn;
-                let tuples: Vec<(&str, &(dyn Fn(u16) -> Keyword))> = vec!(
+                let tuples: Vec<(&str, &(dyn Fn(u16) -> Keyword))> = vec![
                     ("TDIM", &t_dim_constructor),
                     ("TDISP", &t_disp_constructor),
                     ("TFORM", &t_form_constructor),
@@ -352,18 +436,17 @@ impl FromStr for Keyword {
                     ("TTYPE", &t_type_constructor),
                     ("TUNIT", &t_unit_constructor),
                     ("TZERO", &t_zero_constructor),
-                );
-                let special_cases: Vec<PrefixedKeyword> =
-                    tuples
+                ];
+                let special_cases: Vec<PrefixedKeyword> = tuples
                     .into_iter()
-                    .map(|(prefix, constructor)|{ PrefixedKeyword::new(prefix, constructor)})
+                    .map(|(prefix, constructor)| PrefixedKeyword::new(prefix, constructor))
                     .collect();
                 for special_case in special_cases {
                     if special_case.handles(input) {
-                        return special_case.transform(input)
+                        return special_case.transform(input);
                     }
                 }
-                Ok(Keyword::Unprocessed)
+                Ok(Keyword::Unrecognized(input.to_string()))
                 //Err(ParseKeywordError::UnknownKeyword)
             }
         }
@@ -382,7 +465,10 @@ struct PrefixedKeyword<'a> {
 
 impl<'a> PrefixedKeyword<'a> {
     fn new(prefix: &'a str, constructor: &'a (dyn Fn(u16) -> Keyword)) -> PrefixedKeyword<'a> {
-        PrefixedKeyword { prefix: prefix, constructor: constructor }
+        PrefixedKeyword {
+            prefix: prefix,
+            constructor: constructor,
+        }
     }
 }
 
@@ -395,7 +481,7 @@ impl<'a> KeywordSpecialCase for PrefixedKeyword<'a> {
         let (_, representation) = input.split_at(self.prefix.len());
         match u16::from_str(representation) {
             Ok(n) => Ok((self.constructor)(n)),
-            Err(_) => Err(ParseKeywordError::NotANumber)
+            Err(_) => Err(ParseKeywordError::NotANumber),
         }
     }
 }
@@ -413,8 +499,8 @@ fn lmle(n: usize, k: usize) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
     use super::*;
+    use std::str::FromStr;
 
     #[test]
     fn fits_constructed_from_the_new_function_should_eq_hand_construction() {
@@ -430,13 +516,23 @@ mod tests {
     #[test]
     fn header_constructed_from_the_new_function_should_eq_hand_construction() {
         assert_eq!(
-            Header { keyword_records: vec!(
-                KeywordRecord::new(Keyword::SIMPLE, Value::Logical(true), Option::None),
-                KeywordRecord::new(Keyword::NEXTEND, Value::Integer(0i64), Option::Some("no extensions")),
-            )},
+            Header {
+                keyword_records: vec!(
+                    ValueRecord::new(Keyword::SIMPLE, Value::Logical(true), Option::None),
+                    ValueRecord::new(
+                        Keyword::NEXTEND,
+                        Value::Integer(0i64),
+                        Option::Some("no extensions")
+                    ),
+                )
+            },
             Header::new(vec!(
-                KeywordRecord::new(Keyword::SIMPLE, Value::Logical(true), Option::None),
-                KeywordRecord::new(Keyword::NEXTEND, Value::Integer(0i64), Option::Some("no extensions")),
+                ValueRecord::new(Keyword::SIMPLE, Value::Logical(true), Option::None),
+                ValueRecord::new(
+                    Keyword::NEXTEND,
+                    Value::Integer(0i64),
+                    Option::Some("no extensions")
+                ),
             ))
         );
     }
@@ -444,13 +540,18 @@ mod tests {
     #[test]
     fn keyword_record_constructed_from_the_new_function_should_eq_hand_construction() {
         assert_eq!(
-            KeywordRecord { keyword: Keyword::ORIGIN, value: Value::Undefined, comment: Option::None },
-            KeywordRecord::new(Keyword::ORIGIN, Value::Undefined, Option::None));
+            ValueRecord {
+                keyword: Keyword::ORIGIN,
+                value: Value::Undefined,
+                comment: Option::None
+            },
+            ValueRecord::new(Keyword::ORIGIN, Value::Undefined, Option::None)
+        );
     }
 
     #[test]
     fn keywords_could_be_constructed_from_str() {
-        let data = vec!(
+        let data = vec![
             ("AV", Keyword::AV),
             ("BITPIX", Keyword::BITPIX),
             ("CAMPAIGN", Keyword::CAMPAIGN),
@@ -511,7 +612,7 @@ mod tests {
             ("TTABLEID", Keyword::TTABLEID),
             ("XTENSION", Keyword::XTENSION),
             ("ZMAG", Keyword::ZMAG),
-        );
+        ];
 
         for (input, expected) in data {
             assert_eq!(Keyword::from_str(input).unwrap(), expected);
@@ -573,7 +674,6 @@ mod tests {
         }
     }
 
-
     #[allow(non_snake_case)]
     #[test]
     fn TSCALn_should_be_parsed_from_str() {
@@ -625,31 +725,35 @@ mod tests {
 
     #[test]
     fn primary_header_should_determine_correct_data_array_size() {
-        let header = Header::new(vec!(
-            KeywordRecord::new(Keyword::SIMPLE, Value::Logical(true), Option::None),
-            KeywordRecord::new(Keyword::BITPIX, Value::Integer(8i64), Option::None),
-            KeywordRecord::new(Keyword::NAXIS, Value::Integer(2i64), Option::None),
-            KeywordRecord::new(Keyword::NAXISn(1u16), Value::Integer(3i64), Option::None),
-            KeywordRecord::new(Keyword::NAXISn(2u16), Value::Integer(5i64), Option::None),
-            KeywordRecord::new(Keyword::END, Value::Undefined, Option::None),
-        ));
+        let header = Header::new(vec![
+            ValueRecord::new(Keyword::SIMPLE, Value::Logical(true), Option::None),
+            ValueRecord::new(Keyword::BITPIX, Value::Integer(8i64), Option::None),
+            ValueRecord::new(Keyword::NAXIS, Value::Integer(2i64), Option::None),
+            ValueRecord::new(Keyword::NAXISn(1u16), Value::Integer(3i64), Option::None),
+            ValueRecord::new(Keyword::NAXISn(2u16), Value::Integer(5i64), Option::None),
+            ValueRecord::new(Keyword::END, Value::Undefined, Option::None),
+        ]);
 
-        assert_eq!(header.data_array_size(), 1*(2880*8) as usize);
+        assert_eq!(header.data_array_size(), 1 * (2880 * 8) as usize);
     }
 
     #[test]
     fn extension_header_should_determine_correct_data_array_size() {
-        let header = Header::new(vec!(
-            KeywordRecord::new(Keyword::XTENSION, Value::CharacterString("BINTABLE"), Option::None),
-            KeywordRecord::new(Keyword::BITPIX, Value::Integer(128i64), Option::None),
-            KeywordRecord::new(Keyword::NAXIS, Value::Integer(2i64), Option::None),
-            KeywordRecord::new(Keyword::NAXISn(1u16), Value::Integer(3i64), Option::None),
-            KeywordRecord::new(Keyword::NAXISn(2u16), Value::Integer(5i64), Option::None),
-            KeywordRecord::new(Keyword::GCOUNT, Value::Integer(7i64), Option::None),
-            KeywordRecord::new(Keyword::PCOUNT, Value::Integer(11i64), Option::None),
-            KeywordRecord::new(Keyword::END, Value::Undefined, Option::None),
-        ));
+        let header = Header::new(vec![
+            ValueRecord::new(
+                Keyword::XTENSION,
+                Value::CharacterString("BINTABLE"),
+                Option::None,
+            ),
+            ValueRecord::new(Keyword::BITPIX, Value::Integer(128i64), Option::None),
+            ValueRecord::new(Keyword::NAXIS, Value::Integer(2i64), Option::None),
+            ValueRecord::new(Keyword::NAXISn(1u16), Value::Integer(3i64), Option::None),
+            ValueRecord::new(Keyword::NAXISn(2u16), Value::Integer(5i64), Option::None),
+            ValueRecord::new(Keyword::GCOUNT, Value::Integer(7i64), Option::None),
+            ValueRecord::new(Keyword::PCOUNT, Value::Integer(11i64), Option::None),
+            ValueRecord::new(Keyword::END, Value::Undefined, Option::None),
+        ]);
 
-        assert_eq!(header.data_array_size(), 2*(2880*8) as usize);
+        assert_eq!(header.data_array_size(), 2 * (2880 * 8) as usize);
     }
 }
