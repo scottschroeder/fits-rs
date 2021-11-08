@@ -11,11 +11,13 @@ fn main() {
     let high = usize::from_str(&args[3]).expect("thirs argument should be a number");
 
     let mut f = File::open(filename).expect("file not found");
-    let mut buffer: Vec<u8> = vec!();
+    let mut buffer: Vec<u8> = vec![];
     let _ = f.read_to_end(&mut buffer);
 
-    let result: &[u8]= &buffer;
+    let result: &[u8] = &buffer;
 
-    println!("{:?}", str::from_utf8(&result[low..high]).expect("should be utf8"));
+    println!(
+        "{:?}",
+        str::from_utf8(&result[low..high]).expect("should be utf8")
+    );
 }
-
