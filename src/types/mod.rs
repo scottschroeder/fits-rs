@@ -19,8 +19,8 @@ impl<'a> Fits<'a> {
     /// Create a Fits structure with a given primary header
     pub fn new(primary_hdu: HDU<'a>, extensions: Vec<HDU<'a>>) -> Fits<'a> {
         Fits {
-            primary_hdu: primary_hdu,
-            extensions: extensions,
+            primary_hdu,
+            extensions,
         }
     }
 }
@@ -38,7 +38,7 @@ impl<'a> HDU<'a> {
     /// Create an HDU with a header, setting the data_array to none.
     pub fn new(header: Header<'a>) -> HDU<'a> {
         HDU {
-            header: header,
+            header,
             data_array: Option::None,
         }
     }
@@ -54,9 +54,7 @@ pub struct Header<'a> {
 impl<'a> Header<'a> {
     /// Create a Header with a given set of keyword_records
     pub fn new(keyword_records: Vec<ValueRecord<'a>>) -> Header<'a> {
-        Header {
-            keyword_records: keyword_records,
-        }
+        Header { keyword_records }
     }
 
     /// Determines the size in bits of the data array following this header.
@@ -107,7 +105,7 @@ impl<'a> Header<'a> {
     }
 
     fn value_of(&self, keyword: &Keyword) -> Result<Value, ValueRetrievalError> {
-        if self.has_keyword_record(&keyword) {
+        if self.has_keyword_record(keyword) {
             for keyword_record in &self.keyword_records {
                 if keyword_record.keyword == *keyword {
                     return Ok(keyword_record.value.clone());
@@ -125,7 +123,7 @@ impl<'a> Header<'a> {
                 let naxisn = Keyword::NAXISn((n + 1i64) as u16);
                 product *= self
                     .integer_value_of(&naxisn)
-                    .expect(format!("NAXIS{} should be defined", n).as_str());
+                    .unwrap_or_else(|_| panic!("NAXIS{} should be defined", n));
             }
             product
         } else {
@@ -190,9 +188,9 @@ impl<'a> ValueRecord<'a> {
     /// Create a `KeywordRecord` from a specific `Keyword`.
     pub fn new(keyword: Keyword, value: Value<'a>, comment: Option<&'a str>) -> ValueRecord<'a> {
         ValueRecord {
-            keyword: keyword,
-            value: value,
-            comment: comment,
+            keyword,
+            value,
+            comment,
         }
     }
 }
@@ -223,8 +221,8 @@ impl<'a> CommentaryRecord<'a> {
     /// Create a `KeywordRecord` from a specific `Keyword`.
     pub fn new(keyword: Keyword, commentary: Option<&'a str>) -> CommentaryRecord<'a> {
         CommentaryRecord {
-            keyword: keyword,
-            commentary: commentary,
+            keyword,
+            commentary,
         }
     }
 }
@@ -419,7 +417,7 @@ impl FromStr for Keyword {
             "TTABLEID" => Ok(Keyword::TTABLEID),
             "XTENSION" => Ok(Keyword::XTENSION),
             "ZMAG" => Ok(Keyword::ZMAG),
-            input @ _ => {
+            input => {
                 let t_dim_constructor = Keyword::TDIMn;
                 let t_disp_constructor = Keyword::TDISPn;
                 let t_form_constructor = Keyword::TFORMn;
@@ -469,8 +467,8 @@ struct PrefixedKeyword<'a> {
 impl<'a> PrefixedKeyword<'a> {
     fn new(prefix: &'a str, constructor: &'a (dyn Fn(u16) -> Keyword)) -> PrefixedKeyword<'a> {
         PrefixedKeyword {
-            prefix: prefix,
-            constructor: constructor,
+            prefix,
+            constructor,
         }
     }
 }
@@ -739,7 +737,7 @@ mod tests {
             ValueRecord::new(Keyword::END, Value::Undefined, Option::None),
         ]);
 
-        assert_eq!(header.data_array_size(), 1 * (FITS_BLOCK_SIZE * 8) as usize);
+        assert_eq!(header.data_array_size(), (FITS_BLOCK_SIZE * 8) as usize);
     }
 
     #[test]

@@ -139,14 +139,14 @@ fn keyword_field(input: &[u8]) -> IResult<&[u8], Keyword> {
 
 fn comment_keyword(input: &[u8]) -> IResult<&[u8], Keyword> {
     map_res(
-        map_res(tag("COMMENT "), |kw_bytes| std::str::from_utf8(kw_bytes)),
+        map_res(tag("COMMENT "), std::str::from_utf8),
         Keyword::from_str,
     )(input)
 }
 
 fn history_keyword(input: &[u8]) -> IResult<&[u8], Keyword> {
     map_res(
-        map_res(tag("HISTORY "), |kw_bytes| std::str::from_utf8(kw_bytes)),
+        map_res(tag("HISTORY "), std::str::from_utf8),
         Keyword::from_str,
     )(input)
 }
@@ -274,7 +274,7 @@ fn complex_floating_value(input: &[u8]) -> IResult<&[u8], Value> {
 
 fn is_ascii_text_char(chr: u8) -> bool {
     // Space - '~'
-    32u8 <= chr && chr <= 126u8
+    (32u8..=126u8).contains(&chr)
 }
 
 fn is_string_text_char(chr: u8) -> bool {
@@ -285,7 +285,7 @@ fn is_string_text_char(chr: u8) -> bool {
     // Constraint: a string_text_char is identical to an ascii_text_char
     // except for the quote char; a quote char is represented by two
     // successive quote chars.
-    let single_quote = '\'' as u8;
+    let single_quote = b'\'';
     is_ascii_text_char(chr) && chr != single_quote
 }
 
@@ -362,31 +362,31 @@ mod tests {
     #[allow(non_snake_case)]
     #[test]
     fn logical_constant_should_parse_an_uppercase_T_or_F() {
-        for (constant, boolean) in vec![("T", true), ("F", false)] {
+        for (constant, boolean) in &[("T", true), ("F", false)] {
             let data = constant.as_bytes();
 
             let (_, result) = logical_value(data).unwrap();
-            assert_eq!(result, Value::Logical(boolean))
+            assert_eq!(result, Value::Logical(*boolean))
         }
     }
 
     #[test]
     fn real_should_parse_an_floating_point_number() {
-        for (input, f) in vec![("1.0", 1f64), ("37.0", 37f64), ("51.0", 51f64)] {
+        for (input, f) in &[("1.0", 1f64), ("37.0", 37f64), ("51.0", 51f64)] {
             let data = input.as_bytes();
 
             let (_, result) = value(data).unwrap();
-            assert_eq!(result, Value::Real(f))
+            assert_eq!(result, Value::Real(*f))
         }
     }
 
     #[test]
     fn integer_should_parse_an_integer() {
-        for (input, n) in vec![("1", 1i64), ("37", 37i64), ("51", 51i64)] {
+        for (input, n) in &[("1", 1i64), ("37", 37i64), ("51", 51i64)] {
             let data = input.as_bytes();
 
             let (_, result) = value(data).unwrap();
-            assert_eq!(result, Value::Integer(n))
+            assert_eq!(result, Value::Integer(*n))
         }
     }
 
@@ -398,6 +398,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)] // we are testing parsing not math
     fn parse_float() {
         let data = "0.00116355283466".as_bytes();
         let (_, k) = floating(data).unwrap();
