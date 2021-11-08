@@ -1,6 +1,7 @@
 [package]
 name = "fits-rs"
 version = "0.3.0"
+edition = "2018"
 authors = ["Daan van Berkel <daan.v.berkel.1980@gmail.com>"]
 
 description = "FITS encoder and decoder in Rust"
