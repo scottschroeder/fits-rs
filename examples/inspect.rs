@@ -1,8 +1,4 @@
-use std::env;
-use std::fs::File;
-use std::io::Read;
-use std::str;
-use std::str::FromStr;
+use std::{env, fs::File, io::Read, str, str::FromStr};
 
 fn main() {
     let args: Vec<String> = env::args().collect();

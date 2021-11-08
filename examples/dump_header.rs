@@ -2,9 +2,7 @@ extern crate fits_rs;
 extern crate nom;
 
 use fits_rs::parser::parse_header;
-use std::env;
-use std::fs::File;
-use std::io::Read;
+use std::{env, fs::File, io::Read};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -15,8 +13,7 @@ fn main() {
     let _ = f.read_to_end(&mut buffer);
 
     // let result = parse_header(&buffer[..20 * 2880]);
-    for chunk in buffer.chunks_exact(2880) {}
-    let result = parse_header(&buffer[..80]);
+    let result = parse_header(&buffer);
 
     match result {
         Ok((i, keywords)) => {

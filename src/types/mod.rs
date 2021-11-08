@@ -1,7 +1,10 @@
 //! The types modules describes all the structures to express FITS files.
 
-use std::fmt::{Display, Error, Formatter};
-use std::str::FromStr;
+use crate::fits::FITS_BLOCK_SIZE;
+use std::{
+    fmt::{Display, Error, Formatter},
+    str::FromStr,
+};
 
 /// Representation of a FITS file.
 #[derive(Debug, PartialEq)]
@@ -59,9 +62,9 @@ impl<'a> Header<'a> {
     /// Determines the size in bits of the data array following this header.
     pub fn data_array_size(&self) -> usize {
         if self.is_primary() {
-            lmle(self.primary_data_array_size(), 2880 * 8)
+            lmle(self.primary_data_array_size(), FITS_BLOCK_SIZE * 8)
         } else {
-            lmle(self.extention_data_array_size(), 2880 * 8)
+            lmle(self.extention_data_array_size(), FITS_BLOCK_SIZE * 8)
         }
     }
 
@@ -165,7 +168,7 @@ impl<'a> Display for KeywordRecord<'a> {
         match self {
             KeywordRecord::ValueRecord(v) => write!(f, "{}", v),
             KeywordRecord::CommentaryRecord(c) => write!(f, "{}", c),
-            KeywordRecord::EndRecord => write!(f, "END"),
+            KeywordRecord::EndRecord => write!(f, "{}", Keyword::END),
             KeywordRecord::BlankRecord => write!(f, ""),
         }
     }
@@ -557,6 +560,7 @@ mod tests {
             ("CAMPAIGN", Keyword::CAMPAIGN),
             ("CHANNEL", Keyword::CHANNEL),
             ("CHECKSUM", Keyword::CHECKSUM),
+            ("COMMENT", Keyword::COMMENT),
             ("CREATOR", Keyword::CREATOR),
             ("DATASUM", Keyword::DATASUM),
             ("DATA_REL", Keyword::DATA_REL),
@@ -575,6 +579,7 @@ mod tests {
             ("GLON", Keyword::GLON),
             ("GMAG", Keyword::GMAG),
             ("GRCOLOR", Keyword::GRCOLOR),
+            ("HISTORY", Keyword::HISTORY),
             ("HMAG", Keyword::HMAG),
             ("IMAG", Keyword::IMAG),
             ("INSTRUME", Keyword::INSTRUME),
@@ -734,7 +739,7 @@ mod tests {
             ValueRecord::new(Keyword::END, Value::Undefined, Option::None),
         ]);
 
-        assert_eq!(header.data_array_size(), 1 * (2880 * 8) as usize);
+        assert_eq!(header.data_array_size(), 1 * (FITS_BLOCK_SIZE * 8) as usize);
     }
 
     #[test]
@@ -754,6 +759,6 @@ mod tests {
             ValueRecord::new(Keyword::END, Value::Undefined, Option::None),
         ]);
 
-        assert_eq!(header.data_array_size(), 2 * (2880 * 8) as usize);
+        assert_eq!(header.data_array_size(), 2 * (FITS_BLOCK_SIZE * 8) as usize);
     }
 }

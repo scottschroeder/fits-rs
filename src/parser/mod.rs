@@ -5,41 +5,20 @@
 //!
 //! We deviate from their organizational structure to make header END and <blank>
 //! records easier to reason about.
-use crate::types::CommentaryRecord;
-use crate::types::Keyword;
-use crate::types::KeywordRecord;
-use crate::types::Value;
-use crate::types::ValueRecord;
-use nom::branch::alt;
-use nom::bytes::complete::tag;
-use nom::bytes::complete::take;
-use nom::bytes::complete::take_while;
-use nom::bytes::complete::take_while1;
-use nom::character::complete::multispace0;
-use nom::character::is_digit;
-use nom::combinator::eof;
-use nom::combinator::not;
-use nom::combinator::opt;
-use nom::combinator::peek;
-use nom::combinator::recognize;
-use nom::combinator::success;
-use nom::multi::length_value;
-use nom::multi::many0;
-use nom::sequence::delimited;
-use nom::sequence::preceded;
-use nom::sequence::terminated;
-use nom::sequence::tuple;
+use crate::{
+    fits::KEYWORD_LINE_LENGTH,
+    types::{CommentaryRecord, Keyword, KeywordRecord, Value, ValueRecord},
+};
 use nom::{
-    combinator::{map, map_res},
+    branch::alt,
+    bytes::complete::{tag, take, take_while, take_while1},
+    character::{complete::multispace0, is_digit},
+    combinator::{eof, map, map_res, not, opt, peek, recognize, success},
+    multi::{length_value, many0},
+    sequence::{delimited, preceded, terminated, tuple},
     IResult,
 };
 use std::str::FromStr;
-
-/// All Keyword/Value/Comment lines are this fixed length
-const KEYWORD_LINE_LENGTH: usize = 80;
-
-/// All segments are in mulitples of this many bytes
-const FITS_CHUNK_SIZE: usize = 36 * KEYWORD_LINE_LENGTH; // 2880
 
 /// Parse the header data out of a FITS bytestream
 pub fn parse_header(input: &[u8]) -> IResult<&[u8], Vec<KeywordRecord>> {
@@ -292,47 +271,20 @@ fn complex_floating_value(input: &[u8]) -> IResult<&[u8], Value> {
         Value::Complex((r, c))
     })(input)
 }
-// fn old_floating_value(input: &[u8]) -> IResult<&[u8], Value> {
-//     map(
-//         map_res(
-//             map_res(
-//                 recognize(tuple((
-//                     take_while(is_digit),
-//                     tag("."),
-//                     take_while(is_digit),
-//                 ))),
-//                 std::str::from_utf8,
-//             ),
-//             f64::from_str,
-//         ),
-//         Value::Real,
-//     )(input)
-// }
 
 fn is_ascii_text_char(chr: u8) -> bool {
     // Space - '~'
     32u8 <= chr && chr <= 126u8
 }
 
-fn is_anychar_but_equal(chr: u8) -> bool {
-    let equal = '=' as u8;
-    is_ascii_text_char(chr) && chr != equal
-}
-
-fn is_anychar_but_space(chr: u8) -> bool {
-    let space = ' ' as u8;
-    is_ascii_text_char(chr) && chr != space
-}
-
 fn is_string_text_char(chr: u8) -> bool {
-    // Constraint: a string_text_char is identical to an ascii_text_char
-    // except for the quote char; a quote char is represented by two
-    // successive quote chars.
-
     // TODO see 4.2.1: A single quote is represented
     // within a string as two successive single quotes, e.g., O’HARA =
     // ‘O’ ’HARA’. Leading spaces are significant; trailing spaces are
     // not.
+    // Constraint: a string_text_char is identical to an ascii_text_char
+    // except for the quote char; a quote char is represented by two
+    // successive quote chars.
     let single_quote = '\'' as u8;
     is_ascii_text_char(chr) && chr != single_quote
 }

@@ -7,3 +7,10 @@
 
 pub mod parser;
 pub mod types;
+mod fits {
+    /// All Keyword/Value/Comment lines are this fixed length
+    pub(crate) const KEYWORD_LINE_LENGTH: usize = 80;
+
+    /// All segments are in mulitples of this many bytes
+    pub(crate) const FITS_BLOCK_SIZE: usize = 36 * KEYWORD_LINE_LENGTH; // 2880
+}
