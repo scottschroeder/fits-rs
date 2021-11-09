@@ -39,6 +39,7 @@ fn commentary_keyword_record(input: &[u8]) -> IResult<&[u8], HeaderRecord> {
     // We are ignoring two possiblities here:
     // 1) blank records might have text?
     // 2) keyword=text
+    // 3) Multi-line comments
 
     // TODO See 4.1.2.3
     parse_keyword_line(map(
@@ -69,7 +70,10 @@ fn value_keyword_record(input: &[u8]) -> IResult<&[u8], HeaderRecord> {
 }
 
 fn blankfield_record(input: &[u8]) -> IResult<&[u8], HeaderRecord> {
-    parse_keyword_line(map(tag("        "), |_| HeaderRecord::BlankRecord))(input)
+    parse_keyword_line(map(
+        tuple((tag("        "), ws(opt(comment)))),
+        |(_, comment)| HeaderRecord::BlankRecord(comment),
+    ))(input)
 }
 
 fn end_record(input: &[u8]) -> IResult<&[u8], HeaderRecord> {
@@ -290,6 +294,20 @@ mod tests {
                 Value::Integer(200164267),
                 Option::None,
             ))
+        )
+    }
+
+    #[test]
+    fn header_record_should_parse_an_empty_comment() {
+        let data =
+            "               / string version of target id                                    "
+                .as_bytes();
+        assert_eq!(data.len(), KEYWORD_LINE_LENGTH);
+
+        let (_, record) = header_record(data).unwrap();
+        assert_eq!(
+            record,
+            HeaderRecord::BlankRecord(Option::Some("string version of target id"))
         )
     }
 

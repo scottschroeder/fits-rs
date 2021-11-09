@@ -69,7 +69,7 @@ impl<'a> HeaderParser<'a> {
             Ok((remainder, record)) => {
                 match (self.parse_more, &record) {
                     (true, HeaderRecord::EndRecord) => self.parse_more = false,
-                    (false, HeaderRecord::BlankRecord) => {}
+                    (false, HeaderRecord::BlankRecord(_)) => {}
                     (false, _) => panic!("tried to parse more records after header ended"),
                     _ => {}
                 }
@@ -382,21 +382,21 @@ mod tests {
                 Option::Some("data unit checksum updated 2017-03-08T02:47:56"),
             )),
             HeaderRecord::EndRecord,
-            HeaderRecord::BlankRecord,
-            HeaderRecord::BlankRecord,
-            HeaderRecord::BlankRecord,
-            HeaderRecord::BlankRecord,
-            HeaderRecord::BlankRecord,
-            HeaderRecord::BlankRecord,
-            HeaderRecord::BlankRecord,
-            HeaderRecord::BlankRecord,
-            HeaderRecord::BlankRecord,
-            HeaderRecord::BlankRecord,
-            HeaderRecord::BlankRecord,
-            HeaderRecord::BlankRecord,
-            HeaderRecord::BlankRecord,
-            HeaderRecord::BlankRecord,
-            HeaderRecord::BlankRecord,
+            HeaderRecord::BlankRecord(None),
+            HeaderRecord::BlankRecord(None),
+            HeaderRecord::BlankRecord(None),
+            HeaderRecord::BlankRecord(None),
+            HeaderRecord::BlankRecord(None),
+            HeaderRecord::BlankRecord(None),
+            HeaderRecord::BlankRecord(None),
+            HeaderRecord::BlankRecord(None),
+            HeaderRecord::BlankRecord(None),
+            HeaderRecord::BlankRecord(None),
+            HeaderRecord::BlankRecord(None),
+            HeaderRecord::BlankRecord(None),
+            HeaderRecord::BlankRecord(None),
+            HeaderRecord::BlankRecord(None),
+            HeaderRecord::BlankRecord(None),
         ]
     }
 }

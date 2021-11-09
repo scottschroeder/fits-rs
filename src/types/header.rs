@@ -139,13 +139,13 @@ pub enum HeaderRecord<'a> {
     /// A terminal record, indicating the end of a section
     EndRecord,
     /// A placeholder for blank records
-    BlankRecord,
+    BlankRecord(Option<&'a str>),
 }
 
 impl<'a> Display for Header<'a> {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         for hr in &self.records {
-            if let HeaderRecord::BlankRecord = hr {
+            if let HeaderRecord::BlankRecord(None) = hr {
                 continue;
             }
             writeln!(f, "{}", hr)?;
@@ -160,7 +160,8 @@ impl<'a> Display for HeaderRecord<'a> {
             HeaderRecord::KeywordRecord(v) => write!(f, "{}", v),
             HeaderRecord::CommentaryRecord(c) => write!(f, "{}", c),
             HeaderRecord::EndRecord => write!(f, "{}", Keyword::END),
-            HeaderRecord::BlankRecord => write!(f, ""),
+            HeaderRecord::BlankRecord(None) => write!(f, ""),
+            HeaderRecord::BlankRecord(Some(s)) => write!(f, "/ {}", s),
         }
     }
 }
