@@ -8,8 +8,8 @@
 mod header;
 mod util;
 
-pub mod stream_parser;
-use self::stream_parser::HeaderParser;
+mod helper;
+use self::helper::HeaderParser;
 use crate::types::Fits;
 
 type ParseError<'a> = nom::Err<nom::error::Error<&'a [u8]>>;

@@ -12,8 +12,23 @@ fn main() {
     let mut buffer: Vec<u8> = vec![];
     let _ = f.read_to_end(&mut buffer);
 
-    let fits = fits_rs::parser::parse(&buffer).unwrap();
-    for header_block in &fits.headers {
-        println!("{}", header_block)
+    match fits_rs::parser::parse(&buffer) {
+        Ok(fits) => {
+            for header_block in &fits.headers {
+                println!("{}", header_block)
+            }
+        }
+        Err(e) => match e {
+            nom::Err::Incomplete(_) => {
+                eprintln!("fits file appeared incomplete: {}", e)
+            }
+            nom::Err::Error(e) => display_nom_error(e),
+            nom::Err::Failure(e) => display_nom_error(e),
+        },
     }
+}
+
+fn display_nom_error(e: nom::error::Error<&[u8]>) {
+    let s = String::from_utf8_lossy(e.input);
+    eprintln!("unable to parse header due to '{:?}': {:?}", e.code, s);
 }
