@@ -10,6 +10,7 @@ use crate::{
 pub struct HeaderParser<'a> {
     records: Vec<HeaderRecord<'a>>,
     parse_more: bool,
+    start: usize,
     consumed: usize,
 }
 
@@ -25,10 +26,11 @@ pub enum ParseOutcome<'a> {
 
 impl<'a> HeaderParser<'a> {
     /// Create parser
-    pub fn new() -> HeaderParser<'a> {
+    pub fn new(start: usize) -> HeaderParser<'a> {
         HeaderParser {
             records: Vec::new(),
             parse_more: true,
+            start,
             consumed: 0,
         }
     }
@@ -53,7 +55,7 @@ impl<'a> HeaderParser<'a> {
 
     /// Convert this into the `Header` type
     pub fn into_header(self) -> Header<'a> {
-        Header::new(self.records)
+        Header::new(self.records, self.start, self.consumed)
     }
 
     /// parse single record from buf

@@ -1,4 +1,4 @@
-#![deny(missing_docs)]
+#![warn(missing_docs)] // TODO deny
 //! An encoder and decoder for FITS images.
 //!
 //! The *Flexible Image Transport System* ([FITS](https://en.wikipedia.org/wiki/FITS)) is

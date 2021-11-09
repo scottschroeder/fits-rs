@@ -5,61 +5,42 @@ pub use keyword::Keyword;
 use std::fmt::{Display, Error, Formatter};
 
 mod keyword;
-/// Representation of a FITS file.
-#[derive(Debug, PartialEq)]
-pub struct Fits<'a> {
-    /// The primary HDU
-    pub primary_hdu: HDU<'a>,
-    /// The extention HDUs
-    pub extensions: Vec<HDU<'a>>,
-}
-
-impl<'a> Fits<'a> {
-    /// Create a Fits structure with a given primary header
-    pub fn new(primary_hdu: HDU<'a>, extensions: Vec<HDU<'a>>) -> Fits<'a> {
-        Fits {
-            primary_hdu,
-            extensions,
-        }
-    }
-}
-
-/// Header Data Unit, combination of a header and an optional data array.
-#[derive(Debug, PartialEq)]
-pub struct HDU<'a> {
-    /// The header of this HDU.
-    pub header: Header<'a>,
-    /// The optional data array of this HDU.
-    data_array: Option<DataArray>,
-}
-
-impl<'a> HDU<'a> {
-    /// Create an HDU with a header, setting the data_array to none.
-    pub fn new(header: Header<'a>) -> HDU<'a> {
-        HDU {
-            header,
-            data_array: Option::None,
-        }
-    }
-}
-
-/// The primary header of a FITS file.
+/// A FITS header
 #[derive(Debug, PartialEq)]
 pub struct Header<'a> {
-    /// The keyword records of the primary header.
-    pub all_records: Vec<HeaderRecord<'a>>,
+    records: Vec<HeaderRecord<'a>>,
+    start: usize,
+    length: usize,
 }
 
 impl<'a> Header<'a> {
     /// Create a Header with a given set of keyword_records
-    pub fn new(header_records: Vec<HeaderRecord<'a>>) -> Header<'a> {
+    pub fn new(records: Vec<HeaderRecord<'a>>, start: usize, length: usize) -> Header<'a> {
         Header {
-            all_records: header_records,
+            records,
+            start,
+            length,
         }
     }
 
-    /// Determines the size in bits of the data array following this header.
-    pub fn data_array_size(&self) -> usize {
+    fn header_end_position(&self) -> usize {
+        self.start + self.length
+    }
+
+    /// Position where the next header in the file may start
+    ///
+    /// There may or may not actually be a header at this location
+    pub fn next_header(&self) -> usize {
+        self.header_end_position() + self.data_array_bits() / 8
+    }
+
+    /// The (start, end) positions of the data array described by this header
+    pub fn data_array_boundaries(&self) -> (usize, usize) {
+        (self.header_end_position(), self.next_header())
+    }
+
+    /// Determines the size in *bits* of the data array following this header.
+    pub fn data_array_bits(&self) -> usize {
         if self.is_primary() {
             lmle(self.primary_data_array_size(), FITS_BLOCK_SIZE * 8)
         } else {
@@ -68,7 +49,7 @@ impl<'a> Header<'a> {
     }
 
     fn keyword_records(&self) -> impl Iterator<Item = &KeywordRecord<'a>> {
-        self.all_records.iter().filter_map(|r| match r {
+        self.records.iter().filter_map(|r| match r {
             HeaderRecord::KeywordRecord(k) => Some(k),
             _ => None,
         })
@@ -171,7 +152,7 @@ pub enum HeaderRecord<'a> {
 
 impl<'a> Display for Header<'a> {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
-        for hr in &self.all_records {
+        for hr in &self.records {
             if let HeaderRecord::BlankRecord = hr {
                 continue;
             }
@@ -285,24 +266,20 @@ fn lmle(n: usize, k: usize) -> usize {
 
 #[cfg(test)]
 mod tests {
+    use crate::fits::KEYWORD_LINE_LENGTH;
+
     use super::*;
 
-    #[test]
-    fn fits_constructed_from_the_new_function_should_eq_hand_construction() {
-        assert_eq!(
-            Fits {
-                primary_hdu: HDU::new(Header::new(vec!())),
-                extensions: vec!(),
-            },
-            Fits::new(HDU::new(Header::new(vec!())), vec!())
-        );
+    fn build_test_header(records: Vec<HeaderRecord>) -> Header {
+        let expected_len = records.len() * KEYWORD_LINE_LENGTH;
+        Header::new(records, 0, expected_len)
     }
 
     #[test]
     fn header_constructed_from_the_new_function_should_eq_hand_construction() {
         assert_eq!(
             Header {
-                all_records: vec!(
+                records: vec!(
                     HeaderRecord::KeywordRecord(KeywordRecord::new(
                         Keyword::SIMPLE,
                         Value::Logical(true),
@@ -313,20 +290,26 @@ mod tests {
                         Value::Integer(0i64),
                         Option::Some("no extensions")
                     )),
-                )
+                ),
+                start: 0,
+                length: KEYWORD_LINE_LENGTH * 2,
             },
-            Header::new(vec!(
-                HeaderRecord::KeywordRecord(KeywordRecord::new(
-                    Keyword::SIMPLE,
-                    Value::Logical(true),
-                    Option::None
-                )),
-                HeaderRecord::KeywordRecord(KeywordRecord::new(
-                    Keyword::NEXTEND,
-                    Value::Integer(0i64),
-                    Option::Some("no extensions")
-                )),
-            ))
+            Header::new(
+                vec!(
+                    HeaderRecord::KeywordRecord(KeywordRecord::new(
+                        Keyword::SIMPLE,
+                        Value::Logical(true),
+                        Option::None
+                    )),
+                    HeaderRecord::KeywordRecord(KeywordRecord::new(
+                        Keyword::NEXTEND,
+                        Value::Integer(0i64),
+                        Option::Some("no extensions")
+                    )),
+                ),
+                0,
+                KEYWORD_LINE_LENGTH * 2
+            )
         );
     }
 
@@ -344,7 +327,7 @@ mod tests {
 
     #[test]
     fn primary_header_should_determine_correct_data_array_size() {
-        let header = Header::new(vec![
+        let header = build_test_header(vec![
             HeaderRecord::KeywordRecord(KeywordRecord::new(
                 Keyword::SIMPLE,
                 Value::Logical(true),
@@ -377,12 +360,12 @@ mod tests {
             )),
         ]);
 
-        assert_eq!(header.data_array_size(), (FITS_BLOCK_SIZE * 8) as usize);
+        assert_eq!(header.data_array_bits(), (FITS_BLOCK_SIZE * 8) as usize);
     }
 
     #[test]
     fn extension_header_should_determine_correct_data_array_size() {
-        let header = Header::new(vec![
+        let header = build_test_header(vec![
             HeaderRecord::KeywordRecord(KeywordRecord::new(
                 Keyword::XTENSION,
                 Value::CharacterString("BINTABLE"),
@@ -425,6 +408,6 @@ mod tests {
             )),
         ]);
 
-        assert_eq!(header.data_array_size(), 2 * (FITS_BLOCK_SIZE * 8) as usize);
+        assert_eq!(header.data_array_bits(), 2 * (FITS_BLOCK_SIZE * 8) as usize);
     }
 }
