@@ -1,11 +1,10 @@
 //! The types modules describes all the structures to express FITS files.
 
 use crate::fits::FITS_BLOCK_SIZE;
-use std::{
-    fmt::{Display, Error, Formatter},
-    str::FromStr,
-};
+pub use keyword::Keyword;
+use std::fmt::{Display, Error, Formatter};
 
+mod keyword;
 /// Representation of a FITS file.
 #[derive(Debug, PartialEq)]
 pub struct Fits<'a> {
@@ -48,13 +47,15 @@ impl<'a> HDU<'a> {
 #[derive(Debug, PartialEq)]
 pub struct Header<'a> {
     /// The keyword records of the primary header.
-    pub keyword_records: Vec<ValueRecord<'a>>,
+    pub all_records: Vec<HeaderRecord<'a>>,
 }
 
 impl<'a> Header<'a> {
     /// Create a Header with a given set of keyword_records
-    pub fn new(keyword_records: Vec<ValueRecord<'a>>) -> Header<'a> {
-        Header { keyword_records }
+    pub fn new(header_records: Vec<HeaderRecord<'a>>) -> Header<'a> {
+        Header {
+            all_records: header_records,
+        }
     }
 
     /// Determines the size in bits of the data array following this header.
@@ -66,12 +67,19 @@ impl<'a> Header<'a> {
         }
     }
 
+    fn keyword_records(&self) -> impl Iterator<Item = &KeywordRecord<'a>> {
+        self.all_records.iter().filter_map(|r| match r {
+            HeaderRecord::KeywordRecord(k) => Some(k),
+            _ => None,
+        })
+    }
+
     fn is_primary(&self) -> bool {
         self.has_keyword_record(&Keyword::SIMPLE)
     }
 
     fn has_keyword_record(&self, keyword: &Keyword) -> bool {
-        for keyword_record in &self.keyword_records {
+        for keyword_record in self.keyword_records() {
             if *keyword == keyword_record.keyword {
                 return true;
             }
@@ -106,7 +114,7 @@ impl<'a> Header<'a> {
 
     fn value_of(&self, keyword: &Keyword) -> Result<Value, ValueRetrievalError> {
         if self.has_keyword_record(keyword) {
-            for keyword_record in &self.keyword_records {
+            for keyword_record in self.keyword_records() {
                 if keyword_record.keyword == *keyword {
                     return Ok(keyword_record.value.clone());
                 }
@@ -150,9 +158,9 @@ pub struct DataArray;
 /// A value record contains information about a FITS header.
 /// It maps to one of several types of header records
 #[derive(Debug, PartialEq)]
-pub enum KeywordRecord<'a> {
-    /// A `ValueRecord` that maps a keyword to a value
-    ValueRecord(ValueRecord<'a>),
+pub enum HeaderRecord<'a> {
+    /// A `KeywordRecord` that maps a keyword to a value
+    KeywordRecord(KeywordRecord<'a>),
     /// A `CommentaryRecord` that contains text data
     CommentaryRecord(CommentaryRecord<'a>),
     /// A terminal record, indicating the end of a section
@@ -161,13 +169,25 @@ pub enum KeywordRecord<'a> {
     BlankRecord,
 }
 
-impl<'a> Display for KeywordRecord<'a> {
+impl<'a> Display for Header<'a> {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        for hr in &self.all_records {
+            if let HeaderRecord::BlankRecord = hr {
+                continue;
+            }
+            writeln!(f, "{}", hr)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'a> Display for HeaderRecord<'a> {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match self {
-            KeywordRecord::ValueRecord(v) => write!(f, "{}", v),
-            KeywordRecord::CommentaryRecord(c) => write!(f, "{}", c),
-            KeywordRecord::EndRecord => write!(f, "{}", Keyword::END),
-            KeywordRecord::BlankRecord => write!(f, ""),
+            HeaderRecord::KeywordRecord(v) => write!(f, "{}", v),
+            HeaderRecord::CommentaryRecord(c) => write!(f, "{}", c),
+            HeaderRecord::EndRecord => write!(f, "{}", Keyword::END),
+            HeaderRecord::BlankRecord => write!(f, ""),
         }
     }
 }
@@ -175,7 +195,7 @@ impl<'a> Display for KeywordRecord<'a> {
 /// A value record contains information about a FITS header. It consists of a
 /// keyword, the corresponding value and an optional comment.
 #[derive(Debug, PartialEq)]
-pub struct ValueRecord<'a> {
+pub struct KeywordRecord<'a> {
     /// The keyword of this record.
     keyword: Keyword,
     /// The value of this record.
@@ -184,10 +204,10 @@ pub struct ValueRecord<'a> {
     comment: Option<&'a str>,
 }
 
-impl<'a> ValueRecord<'a> {
+impl<'a> KeywordRecord<'a> {
     /// Create a `KeywordRecord` from a specific `Keyword`.
-    pub fn new(keyword: Keyword, value: Value<'a>, comment: Option<&'a str>) -> ValueRecord<'a> {
-        ValueRecord {
+    pub fn new(keyword: Keyword, value: Value<'a>, comment: Option<&'a str>) -> KeywordRecord<'a> {
+        KeywordRecord {
             keyword,
             value,
             comment,
@@ -195,7 +215,7 @@ impl<'a> ValueRecord<'a> {
     }
 }
 
-impl<'a> Display for ValueRecord<'a> {
+impl<'a> Display for KeywordRecord<'a> {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         write!(
             f,
@@ -252,241 +272,6 @@ pub enum Value<'a> {
     Undefined,
 }
 
-/// The various keywords that can be found in headers.
-#[derive(Debug, PartialEq)]
-#[allow(non_camel_case_types, missing_docs)]
-pub enum Keyword {
-    AV,
-    BITPIX,
-    CAMPAIGN,
-    CHANNEL,
-    CHECKSUM,
-    COMMENT,
-    CREATOR,
-    DATASUM,
-    DATA_REL,
-    DATE,
-    DEC_OBJ,
-    EBMINUSV,
-    END,
-    EQUINOX,
-    EXTEND,
-    EXTNAME,
-    EXTVER,
-    FEH,
-    FILEVER,
-    GCOUNT,
-    GKCOLOR,
-    GLAT,
-    GLON,
-    GMAG,
-    GRCOLOR,
-    HISTORY,
-    HMAG,
-    IMAG,
-    INSTRUME,
-    JKCOLOR,
-    JMAG,
-    KEPLERID,
-    KEPMAG,
-    KMAG,
-    LOGG,
-    MISSION,
-    MODULE,
-    NAXIS,
-    NAXISn(u16),
-    NEXTEND,
-    OBJECT,
-    OBSMODE,
-    ORIGIN,
-    OUTPUT,
-    PARALLAX,
-    PCOUNT,
-    PMDEC,
-    PMRA,
-    PMTOTAL,
-    PROCVER,
-    RADESYS,
-    RADIUS,
-    RA_OBJ,
-    RMAG,
-    SIMPLE,
-    TDIMn(u16),
-    TDISPn(u16),
-    TEFF,
-    TELESCOP,
-    TFIELDS,
-    TFORMn(u16),
-    TIMVERSN,
-    THEAP,
-    TMINDEX,
-    TNULLn(u16),
-    TSCALn(u16),
-    TTABLEID,
-    TTYPEn(u16),
-    TUNITn(u16),
-    TZEROn(u16),
-    XTENSION,
-    ZMAG,
-    Unrecognized(String), // TODO Remove the unprocessed keyword
-}
-
-impl Display for Keyword {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Keyword::Unrecognized(k) => write!(f, "{}", k),
-            _ => write!(f, "{:?}", self),
-        }
-    }
-}
-
-/// Problems that could occur when parsing a `str` for a Keyword are enumerated here.
-#[derive(Debug)]
-pub enum ParseKeywordError {
-    /// When a str can not be recognized as a keyword, this error will be returned.
-    UnknownKeyword,
-    /// When `NAXIS<number>` et. al. are parsed where `<number>` is not an actual number.
-    NotANumber,
-}
-
-impl FromStr for Keyword {
-    type Err = ParseKeywordError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.trim_end() {
-            "AV" => Ok(Keyword::AV),
-            "BITPIX" => Ok(Keyword::BITPIX),
-            "CAMPAIGN" => Ok(Keyword::CAMPAIGN),
-            "CHANNEL" => Ok(Keyword::CHANNEL),
-            "CHECKSUM" => Ok(Keyword::CHECKSUM),
-            "COMMENT" => Ok(Keyword::COMMENT),
-            "CREATOR" => Ok(Keyword::CREATOR),
-            "DATASUM" => Ok(Keyword::DATASUM),
-            "DATA_REL" => Ok(Keyword::DATA_REL),
-            "DATE" => Ok(Keyword::DATE),
-            "DEC_OBJ" => Ok(Keyword::DEC_OBJ),
-            "EBMINUSV" => Ok(Keyword::EBMINUSV),
-            "END" => Ok(Keyword::END),
-            "EQUINOX" => Ok(Keyword::EQUINOX),
-            "EXTEND" => Ok(Keyword::EXTEND),
-            "EXTNAME" => Ok(Keyword::EXTNAME),
-            "EXTVER" => Ok(Keyword::EXTVER),
-            "FEH" => Ok(Keyword::FEH),
-            "FILEVER" => Ok(Keyword::FILEVER),
-            "GCOUNT" => Ok(Keyword::GCOUNT),
-            "GKCOLOR" => Ok(Keyword::GKCOLOR),
-            "GLAT" => Ok(Keyword::GLAT),
-            "GLON" => Ok(Keyword::GLON),
-            "GMAG" => Ok(Keyword::GMAG),
-            "GRCOLOR" => Ok(Keyword::GRCOLOR),
-            "HISTORY" => Ok(Keyword::HISTORY),
-            "HMAG" => Ok(Keyword::HMAG),
-            "IMAG" => Ok(Keyword::IMAG),
-            "INSTRUME" => Ok(Keyword::INSTRUME),
-            "JKCOLOR" => Ok(Keyword::JKCOLOR),
-            "JMAG" => Ok(Keyword::JMAG),
-            "KEPLERID" => Ok(Keyword::KEPLERID),
-            "KEPMAG" => Ok(Keyword::KEPMAG),
-            "KMAG" => Ok(Keyword::KMAG),
-            "LOGG" => Ok(Keyword::LOGG),
-            "MISSION" => Ok(Keyword::MISSION),
-            "MODULE" => Ok(Keyword::MODULE),
-            "NAXIS" => Ok(Keyword::NAXIS),
-            "NEXTEND" => Ok(Keyword::NEXTEND),
-            "OBJECT" => Ok(Keyword::OBJECT),
-            "OBSMODE" => Ok(Keyword::OBSMODE),
-            "ORIGIN" => Ok(Keyword::ORIGIN),
-            "OUTPUT" => Ok(Keyword::OUTPUT),
-            "PARALLAX" => Ok(Keyword::PARALLAX),
-            "PCOUNT" => Ok(Keyword::PCOUNT),
-            "PMDEC" => Ok(Keyword::PMDEC),
-            "PMRA" => Ok(Keyword::PMRA),
-            "PMTOTAL" => Ok(Keyword::PMTOTAL),
-            "PROCVER" => Ok(Keyword::PROCVER),
-            "RADESYS" => Ok(Keyword::RADESYS),
-            "RADIUS" => Ok(Keyword::RADIUS),
-            "RA_OBJ" => Ok(Keyword::RA_OBJ),
-            "RMAG" => Ok(Keyword::RMAG),
-            "SIMPLE" => Ok(Keyword::SIMPLE),
-            "TEFF" => Ok(Keyword::TEFF),
-            "TELESCOP" => Ok(Keyword::TELESCOP),
-            "TFIELDS" => Ok(Keyword::TFIELDS),
-            "THEAP" => Ok(Keyword::THEAP),
-            "TIMVERSN" => Ok(Keyword::TIMVERSN),
-            "TMINDEX" => Ok(Keyword::TMINDEX),
-            "TTABLEID" => Ok(Keyword::TTABLEID),
-            "XTENSION" => Ok(Keyword::XTENSION),
-            "ZMAG" => Ok(Keyword::ZMAG),
-            input => {
-                let t_dim_constructor = Keyword::TDIMn;
-                let t_disp_constructor = Keyword::TDISPn;
-                let t_form_constructor = Keyword::TFORMn;
-                let naxis_constructor = Keyword::NAXISn;
-                let t_null_constructor = Keyword::TNULLn;
-                let t_scal_constructor = Keyword::TSCALn;
-                let t_type_constructor = Keyword::TTYPEn;
-                let t_unit_constructor = Keyword::TUNITn;
-                let t_zero_constructor = Keyword::TZEROn;
-                let tuples: Vec<(&str, &(dyn Fn(u16) -> Keyword))> = vec![
-                    ("TDIM", &t_dim_constructor),
-                    ("TDISP", &t_disp_constructor),
-                    ("TFORM", &t_form_constructor),
-                    ("NAXIS", &naxis_constructor),
-                    ("TNULL", &t_null_constructor),
-                    ("TSCAL", &t_scal_constructor),
-                    ("TTYPE", &t_type_constructor),
-                    ("TUNIT", &t_unit_constructor),
-                    ("TZERO", &t_zero_constructor),
-                ];
-                let special_cases: Vec<PrefixedKeyword> = tuples
-                    .into_iter()
-                    .map(|(prefix, constructor)| PrefixedKeyword::new(prefix, constructor))
-                    .collect();
-                for special_case in special_cases {
-                    if special_case.handles(input) {
-                        return special_case.transform(input);
-                    }
-                }
-                Ok(Keyword::Unrecognized(input.to_string()))
-                //Err(ParseKeywordError::UnknownKeyword)
-            }
-        }
-    }
-}
-
-trait KeywordSpecialCase {
-    fn handles(&self, input: &str) -> bool;
-    fn transform(&self, input: &str) -> Result<Keyword, ParseKeywordError>;
-}
-
-struct PrefixedKeyword<'a> {
-    prefix: &'a str,
-    constructor: &'a (dyn Fn(u16) -> Keyword),
-}
-
-impl<'a> PrefixedKeyword<'a> {
-    fn new(prefix: &'a str, constructor: &'a (dyn Fn(u16) -> Keyword)) -> PrefixedKeyword<'a> {
-        PrefixedKeyword {
-            prefix,
-            constructor,
-        }
-    }
-}
-
-impl<'a> KeywordSpecialCase for PrefixedKeyword<'a> {
-    fn handles(&self, input: &str) -> bool {
-        input.starts_with(self.prefix)
-    }
-
-    fn transform(&self, input: &str) -> Result<Keyword, ParseKeywordError> {
-        let (_, representation) = input.split_at(self.prefix.len());
-        match u16::from_str(representation) {
-            Ok(n) => Ok((self.constructor)(n)),
-            Err(_) => Err(ParseKeywordError::NotANumber),
-        }
-    }
-}
-
 /// For input n and k, finds the least multiple of k such that n <= q*k and
 /// (q-1)*k < n
 fn lmle(n: usize, k: usize) -> usize {
@@ -501,7 +286,6 @@ fn lmle(n: usize, k: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::str::FromStr;
 
     #[test]
     fn fits_constructed_from_the_new_function_should_eq_hand_construction() {
@@ -518,22 +302,30 @@ mod tests {
     fn header_constructed_from_the_new_function_should_eq_hand_construction() {
         assert_eq!(
             Header {
-                keyword_records: vec!(
-                    ValueRecord::new(Keyword::SIMPLE, Value::Logical(true), Option::None),
-                    ValueRecord::new(
+                all_records: vec!(
+                    HeaderRecord::KeywordRecord(KeywordRecord::new(
+                        Keyword::SIMPLE,
+                        Value::Logical(true),
+                        Option::None
+                    )),
+                    HeaderRecord::KeywordRecord(KeywordRecord::new(
                         Keyword::NEXTEND,
                         Value::Integer(0i64),
                         Option::Some("no extensions")
-                    ),
+                    )),
                 )
             },
             Header::new(vec!(
-                ValueRecord::new(Keyword::SIMPLE, Value::Logical(true), Option::None),
-                ValueRecord::new(
+                HeaderRecord::KeywordRecord(KeywordRecord::new(
+                    Keyword::SIMPLE,
+                    Value::Logical(true),
+                    Option::None
+                )),
+                HeaderRecord::KeywordRecord(KeywordRecord::new(
                     Keyword::NEXTEND,
                     Value::Integer(0i64),
                     Option::Some("no extensions")
-                ),
+                )),
             ))
         );
     }
@@ -541,200 +333,48 @@ mod tests {
     #[test]
     fn keyword_record_constructed_from_the_new_function_should_eq_hand_construction() {
         assert_eq!(
-            ValueRecord {
+            KeywordRecord {
                 keyword: Keyword::ORIGIN,
                 value: Value::Undefined,
                 comment: Option::None
             },
-            ValueRecord::new(Keyword::ORIGIN, Value::Undefined, Option::None)
+            KeywordRecord::new(Keyword::ORIGIN, Value::Undefined, Option::None)
         );
-    }
-
-    #[test]
-    fn keywords_could_be_constructed_from_str() {
-        let data = vec![
-            ("AV", Keyword::AV),
-            ("BITPIX", Keyword::BITPIX),
-            ("CAMPAIGN", Keyword::CAMPAIGN),
-            ("CHANNEL", Keyword::CHANNEL),
-            ("CHECKSUM", Keyword::CHECKSUM),
-            ("COMMENT", Keyword::COMMENT),
-            ("CREATOR", Keyword::CREATOR),
-            ("DATASUM", Keyword::DATASUM),
-            ("DATA_REL", Keyword::DATA_REL),
-            ("DATE", Keyword::DATE),
-            ("DEC_OBJ", Keyword::DEC_OBJ),
-            ("EBMINUSV", Keyword::EBMINUSV),
-            ("END", Keyword::END),
-            ("EQUINOX", Keyword::EQUINOX),
-            ("EXTEND", Keyword::EXTEND),
-            ("EXTVER", Keyword::EXTVER),
-            ("FEH", Keyword::FEH),
-            ("FILEVER", Keyword::FILEVER),
-            ("GCOUNT", Keyword::GCOUNT),
-            ("GKCOLOR", Keyword::GKCOLOR),
-            ("GLAT", Keyword::GLAT),
-            ("GLON", Keyword::GLON),
-            ("GMAG", Keyword::GMAG),
-            ("GRCOLOR", Keyword::GRCOLOR),
-            ("HISTORY", Keyword::HISTORY),
-            ("HMAG", Keyword::HMAG),
-            ("IMAG", Keyword::IMAG),
-            ("INSTRUME", Keyword::INSTRUME),
-            ("JKCOLOR", Keyword::JKCOLOR),
-            ("JMAG", Keyword::JMAG),
-            ("KEPLERID", Keyword::KEPLERID),
-            ("KEPMAG", Keyword::KEPMAG),
-            ("KMAG", Keyword::KMAG),
-            ("LOGG", Keyword::LOGG),
-            ("MISSION", Keyword::MISSION),
-            ("MODULE", Keyword::MODULE),
-            ("NAXIS", Keyword::NAXIS),
-            ("NEXTEND", Keyword::NEXTEND),
-            ("OBJECT", Keyword::OBJECT),
-            ("OBSMODE", Keyword::OBSMODE),
-            ("ORIGIN", Keyword::ORIGIN),
-            ("OUTPUT", Keyword::OUTPUT),
-            ("PARALLAX", Keyword::PARALLAX),
-            ("PCOUNT", Keyword::PCOUNT),
-            ("PMDEC", Keyword::PMDEC),
-            ("PMRA", Keyword::PMRA),
-            ("PMTOTAL", Keyword::PMTOTAL),
-            ("PROCVER", Keyword::PROCVER),
-            ("RADESYS", Keyword::RADESYS),
-            ("RADIUS", Keyword::RADIUS),
-            ("RA_OBJ", Keyword::RA_OBJ),
-            ("RMAG", Keyword::RMAG),
-            ("SIMPLE", Keyword::SIMPLE),
-            ("TEFF", Keyword::TEFF),
-            ("TELESCOP", Keyword::TELESCOP),
-            ("TFIELDS", Keyword::TFIELDS),
-            ("TIMVERSN", Keyword::TIMVERSN),
-            ("THEAP", Keyword::THEAP),
-            ("TMINDEX", Keyword::TMINDEX),
-            ("TTABLEID", Keyword::TTABLEID),
-            ("XTENSION", Keyword::XTENSION),
-            ("ZMAG", Keyword::ZMAG),
-        ];
-
-        for (input, expected) in data {
-            assert_eq!(Keyword::from_str(input).unwrap(), expected);
-        }
-    }
-
-    #[allow(non_snake_case)]
-    #[test]
-    fn TDIMn_should_be_parsed_from_str() {
-        for n in 1u16..1000u16 {
-            let keyword = Keyword::TDIMn(n);
-            let representation = format!("TDIM{}", n);
-
-            assert_eq!(Keyword::from_str(&representation).unwrap(), keyword);
-        }
-    }
-
-    #[allow(non_snake_case)]
-    #[test]
-    fn TDISPn_should_be_parsed_from_str() {
-        for n in 1u16..1000u16 {
-            let keyword = Keyword::TDISPn(n);
-            let representation = format!("TDISP{}", n);
-
-            assert_eq!(Keyword::from_str(&representation).unwrap(), keyword);
-        }
-    }
-
-    #[allow(non_snake_case)]
-    #[test]
-    fn NAXISn_should_be_parsed_from_str() {
-        for n in 1u16..1000u16 {
-            let keyword = Keyword::NAXISn(n);
-            let representation = format!("NAXIS{}", n);
-
-            assert_eq!(Keyword::from_str(&representation).unwrap(), keyword);
-        }
-    }
-
-    #[allow(non_snake_case)]
-    #[test]
-    fn TFORM_should_be_parsed_from_str() {
-        for n in 1u16..1000u16 {
-            let keyword = Keyword::TFORMn(n);
-            let representation = format!("TFORM{}", n);
-
-            assert_eq!(Keyword::from_str(&representation).unwrap(), keyword);
-        }
-    }
-
-    #[allow(non_snake_case)]
-    #[test]
-    fn TTYPE_should_be_parsed_from_str() {
-        for n in 1u16..1000u16 {
-            let keyword = Keyword::TTYPEn(n);
-            let representation = format!("TTYPE{}", n);
-
-            assert_eq!(Keyword::from_str(&representation).unwrap(), keyword);
-        }
-    }
-
-    #[allow(non_snake_case)]
-    #[test]
-    fn TSCALn_should_be_parsed_from_str() {
-        for n in 1u16..1000u16 {
-            let keyword = Keyword::TSCALn(n);
-            let representation = format!("TSCAL{}", n);
-
-            assert_eq!(Keyword::from_str(&representation).unwrap(), keyword);
-        }
-    }
-
-    #[allow(non_snake_case)]
-    #[test]
-    fn TZEROn_should_be_parsed_from_str() {
-        for n in 1u16..1000u16 {
-            let keyword = Keyword::TZEROn(n);
-            let representation = format!("TZERO{}", n);
-
-            assert_eq!(Keyword::from_str(&representation).unwrap(), keyword);
-        }
-    }
-
-    #[allow(non_snake_case)]
-    #[test]
-    fn TNULL_should_be_parsed_from_str() {
-        for n in 1u16..1000u16 {
-            let keyword = Keyword::TNULLn(n);
-            let representation = format!("TNULL{}", n);
-
-            assert_eq!(Keyword::from_str(&representation).unwrap(), keyword);
-        }
-    }
-
-    #[allow(non_snake_case)]
-    #[test]
-    fn TUNIT_should_be_parsed_from_str() {
-        for n in 1u16..1000u16 {
-            let keyword = Keyword::TUNITn(n);
-            let representation = format!("TUNIT{}", n);
-
-            assert_eq!(Keyword::from_str(&representation).unwrap(), keyword);
-        }
-    }
-
-    #[test]
-    fn should_also_parse_whitespace_keywords() {
-        assert_eq!(Keyword::from_str("SIMPLE  ").unwrap(), Keyword::SIMPLE);
     }
 
     #[test]
     fn primary_header_should_determine_correct_data_array_size() {
         let header = Header::new(vec![
-            ValueRecord::new(Keyword::SIMPLE, Value::Logical(true), Option::None),
-            ValueRecord::new(Keyword::BITPIX, Value::Integer(8i64), Option::None),
-            ValueRecord::new(Keyword::NAXIS, Value::Integer(2i64), Option::None),
-            ValueRecord::new(Keyword::NAXISn(1u16), Value::Integer(3i64), Option::None),
-            ValueRecord::new(Keyword::NAXISn(2u16), Value::Integer(5i64), Option::None),
-            ValueRecord::new(Keyword::END, Value::Undefined, Option::None),
+            HeaderRecord::KeywordRecord(KeywordRecord::new(
+                Keyword::SIMPLE,
+                Value::Logical(true),
+                Option::None,
+            )),
+            HeaderRecord::KeywordRecord(KeywordRecord::new(
+                Keyword::BITPIX,
+                Value::Integer(8i64),
+                Option::None,
+            )),
+            HeaderRecord::KeywordRecord(KeywordRecord::new(
+                Keyword::NAXIS,
+                Value::Integer(2i64),
+                Option::None,
+            )),
+            HeaderRecord::KeywordRecord(KeywordRecord::new(
+                Keyword::NAXISn(1u16),
+                Value::Integer(3i64),
+                Option::None,
+            )),
+            HeaderRecord::KeywordRecord(KeywordRecord::new(
+                Keyword::NAXISn(2u16),
+                Value::Integer(5i64),
+                Option::None,
+            )),
+            HeaderRecord::KeywordRecord(KeywordRecord::new(
+                Keyword::END,
+                Value::Undefined,
+                Option::None,
+            )),
         ]);
 
         assert_eq!(header.data_array_size(), (FITS_BLOCK_SIZE * 8) as usize);
@@ -743,18 +383,46 @@ mod tests {
     #[test]
     fn extension_header_should_determine_correct_data_array_size() {
         let header = Header::new(vec![
-            ValueRecord::new(
+            HeaderRecord::KeywordRecord(KeywordRecord::new(
                 Keyword::XTENSION,
                 Value::CharacterString("BINTABLE"),
                 Option::None,
-            ),
-            ValueRecord::new(Keyword::BITPIX, Value::Integer(128i64), Option::None),
-            ValueRecord::new(Keyword::NAXIS, Value::Integer(2i64), Option::None),
-            ValueRecord::new(Keyword::NAXISn(1u16), Value::Integer(3i64), Option::None),
-            ValueRecord::new(Keyword::NAXISn(2u16), Value::Integer(5i64), Option::None),
-            ValueRecord::new(Keyword::GCOUNT, Value::Integer(7i64), Option::None),
-            ValueRecord::new(Keyword::PCOUNT, Value::Integer(11i64), Option::None),
-            ValueRecord::new(Keyword::END, Value::Undefined, Option::None),
+            )),
+            HeaderRecord::KeywordRecord(KeywordRecord::new(
+                Keyword::BITPIX,
+                Value::Integer(128i64),
+                Option::None,
+            )),
+            HeaderRecord::KeywordRecord(KeywordRecord::new(
+                Keyword::NAXIS,
+                Value::Integer(2i64),
+                Option::None,
+            )),
+            HeaderRecord::KeywordRecord(KeywordRecord::new(
+                Keyword::NAXISn(1u16),
+                Value::Integer(3i64),
+                Option::None,
+            )),
+            HeaderRecord::KeywordRecord(KeywordRecord::new(
+                Keyword::NAXISn(2u16),
+                Value::Integer(5i64),
+                Option::None,
+            )),
+            HeaderRecord::KeywordRecord(KeywordRecord::new(
+                Keyword::GCOUNT,
+                Value::Integer(7i64),
+                Option::None,
+            )),
+            HeaderRecord::KeywordRecord(KeywordRecord::new(
+                Keyword::PCOUNT,
+                Value::Integer(11i64),
+                Option::None,
+            )),
+            HeaderRecord::KeywordRecord(KeywordRecord::new(
+                Keyword::END,
+                Value::Undefined,
+                Option::None,
+            )),
         ]);
 
         assert_eq!(header.data_array_size(), 2 * (FITS_BLOCK_SIZE * 8) as usize);
