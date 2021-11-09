@@ -6,13 +6,29 @@
 //! We deviate from their organizational structure to make header END and <blank>
 //! records easier to reason about.
 mod header;
-pub mod stream_parser;
 mod util;
-use crate::types::HeaderRecord;
-use nom::IResult;
 
-/// Parse the entire header data out of a FITS bytestream
-pub fn parse_header(input: &[u8]) -> IResult<&[u8], Vec<HeaderRecord>> {
-    // many0(keyword_record)(input)
-    header::header(input)
+pub mod stream_parser;
+use self::stream_parser::HeaderParser;
+use crate::types::Fits;
+
+type ParseError<'a> = nom::Err<nom::error::Error<&'a [u8]>>;
+
+/// Will parse data from a FITS file into a `Fits` structure
+pub fn parse(input: &[u8]) -> Result<Fits, ParseError> {
+    let mut headers = Vec::new();
+    let mut start = 0;
+    loop {
+        let segment = &input[start..];
+        if segment.is_empty() {
+            // We ran out of file, so we are done
+            break;
+        }
+        let mut helper = HeaderParser::new(start);
+        helper.parse_header(segment)?;
+        let header = helper.into_header();
+        start = header.next_header();
+        headers.push(header);
+    }
+    Ok(Fits { headers })
 }
