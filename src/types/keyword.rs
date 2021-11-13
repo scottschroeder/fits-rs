@@ -3,8 +3,94 @@ use std::{
     str::FromStr,
 };
 
+use self::keyword_text::KeywordText;
+
+mod keyword_text {
+    use std::fmt;
+    use std::ops::Deref;
+    use std::str;
+
+    /// A stack-allocated string to store unrecognized keywords.
+    ///
+    /// Limited to exactly 8 bytes.
+    #[derive(Clone, Copy, PartialEq)]
+    pub struct KeywordText {
+        buf: [u8; 8],
+        len: usize,
+    }
+
+    impl KeywordText {
+        pub(crate) fn new(keyword: &str) -> KeywordText {
+            let len = keyword.as_bytes().len();
+            assert!(
+                len <= 8,
+                "keyword can not store string larger than 8 bytes: {:?} has {} bytes",
+                keyword,
+                len
+            );
+            let mut buf = [0; 8];
+            buf[0..len].copy_from_slice(keyword.as_bytes());
+            KeywordText { buf, len }
+        }
+
+        pub fn as_str(&self) -> &str {
+            // This struct is in its own module, and the only way to instantiate it
+            // is to use the `new` function, which only accepts a `&str`.
+            unsafe { str::from_utf8_unchecked(&self.buf[..self.len]) }
+        }
+    }
+
+    impl Deref for KeywordText {
+        type Target = str;
+
+        fn deref(&self) -> &Self::Target {
+            self.as_str()
+        }
+    }
+
+    impl fmt::Debug for KeywordText {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            self.as_str().fmt(f)
+        }
+    }
+
+    impl<T: AsRef<str>> From<T> for KeywordText {
+        fn from(s: T) -> Self {
+            let s = s.as_ref();
+            KeywordText::new(s)
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn create_keyword_full() {
+            let s = "deadbeef";
+            assert_eq!(KeywordText::new(s).as_str(), s);
+        }
+        #[test]
+        fn create_keyword_partial() {
+            let s = "fitskey";
+            assert_eq!(KeywordText::new(s).as_str(), s);
+        }
+        #[test]
+        fn create_keyword_empty() {
+            let s = "";
+            assert_eq!(KeywordText::new(s).as_str(), s);
+        }
+        #[test]
+        fn keyword_deref_str_check() {
+            let s = "fitskey";
+            let k = KeywordText::new(s);
+            assert_eq!(k.find("t"), Some(2));
+        }
+    }
+}
+
 /// The various keywords that can be found in headers.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 #[allow(non_camel_case_types, missing_docs)]
 pub enum Keyword {
     AV,
@@ -79,13 +165,13 @@ pub enum Keyword {
     TZEROn(u16),
     XTENSION,
     ZMAG,
-    Unrecognized(String),
+    Unrecognized(KeywordText),
 }
 
 impl Display for Keyword {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Keyword::Unrecognized(k) => write!(f, "{}", k),
+            Keyword::Unrecognized(k) => write!(f, "{}", k.as_str()),
             _ => write!(f, "{:?}", self),
         }
     }
@@ -198,7 +284,7 @@ impl FromStr for Keyword {
                         return special_case.transform(input);
                     }
                 }
-                Ok(Keyword::Unrecognized(input.to_string()))
+                Ok(Keyword::Unrecognized(input.into()))
                 //Err(ParseKeywordError::UnknownKeyword)
             }
         }

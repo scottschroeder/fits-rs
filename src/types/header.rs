@@ -26,12 +26,12 @@ impl<'a> Header<'a> {
     /// Position where the next header in the file may start
     ///
     /// There may or may not actually be a header at this location
-    pub fn next_header(&self) -> usize {
+    pub(crate) fn next_header(&self) -> usize {
         self.header_end_position() + self.data_array_bits() / 8
     }
 
     /// The (start, end) positions of the data array described by this header
-    pub fn data_array_boundaries(&self) -> (usize, usize) {
+    pub(crate) fn data_array_boundaries(&self) -> (usize, usize) {
         (self.header_end_position(), self.next_header())
     }
 
@@ -82,14 +82,24 @@ impl<'a> Header<'a> {
             as usize
     }
 
-    fn integer_value_of(&self, keyword: &Keyword) -> Result<i64, ValueRetrievalError> {
+    /// Get the value of a keyword as an `i64`
+    pub fn integer_value_of(&self, keyword: &Keyword) -> Result<i64, ValueRetrievalError> {
         self.value_of(keyword).and_then(|value| match value {
             Value::Integer(n) => Ok(n),
             _ => Err(ValueRetrievalError::NotAnInteger),
         })
     }
 
-    fn value_of(&self, keyword: &Keyword) -> Result<Value, ValueRetrievalError> {
+    /// Get the value of a keyword as a `str`
+    pub fn str_value_of(&self, keyword: &Keyword) -> Result<&'a str, ValueRetrievalError> {
+        self.value_of(keyword).and_then(|value| match value {
+            Value::CharacterString(s) => Ok(s),
+            _ => Err(ValueRetrievalError::NotAString),
+        })
+    }
+
+    /// Get the value of a keyword
+    pub fn value_of(&self, keyword: &Keyword) -> Result<Value<'a>, ValueRetrievalError> {
         if self.has_keyword_record(keyword) {
             for keyword_record in self.keyword_records() {
                 if keyword_record.keyword == *keyword {
@@ -122,6 +132,10 @@ impl<'a> Header<'a> {
 pub enum ValueRetrievalError {
     /// The value associated with this keyword is not an integer.
     NotAnInteger,
+    /// The value associated with this keyword is not a string.
+    NotAString,
+    /// The value associated with this keyword is not a bool.
+    NotABool,
     /// There is no value associated with this keyword.
     ValueUndefined,
     /// The keyword is not present in the header.

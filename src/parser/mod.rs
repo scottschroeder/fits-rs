@@ -6,17 +6,19 @@
 //! We deviate from their organizational structure to make header END and <blank>
 //! records easier to reason about.
 mod header;
+pub(crate) mod type_forms;
 mod util;
 
 mod helper;
 use self::helper::HeaderParser;
 use crate::types::Fits;
+use crate::types::HDU;
 
 type ParseError<'a> = nom::Err<nom::error::Error<&'a [u8]>>;
 
 /// Will parse data from a FITS file into a `Fits` structure
 pub fn parse(input: &[u8]) -> Result<Fits, ParseError> {
-    let mut headers = Vec::new();
+    let mut hdu = Vec::new();
     let mut start = 0;
     loop {
         let segment = &input[start..];
@@ -28,7 +30,7 @@ pub fn parse(input: &[u8]) -> Result<Fits, ParseError> {
         helper.parse_header(segment)?;
         let header = helper.into_header();
         start = header.next_header();
-        headers.push(header);
+        hdu.push(HDU::new(header, input));
     }
-    Ok(Fits { headers })
+    Ok(Fits { hdu })
 }

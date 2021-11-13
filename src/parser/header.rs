@@ -1,6 +1,6 @@
 use crate::{
     fits::KEYWORD_LINE_LENGTH,
-    parser::util::{exact_length, pair_values, ws},
+    parser::util::{exact_length, pair_values, ws, is_ascii_text_char},
     types::{CommentaryRecord, HeaderRecord, Keyword, KeywordRecord, Value},
 };
 use nom::{
@@ -222,11 +222,6 @@ fn complex_floating_value(input: &[u8]) -> IResult<&[u8], Value> {
     })(input)
 }
 
-fn is_ascii_text_char(chr: u8) -> bool {
-    // Space - '~'
-    (32u8..=126u8).contains(&chr)
-}
-
 fn is_string_text_char(chr: u8) -> bool {
     // TODO see 4.2.1: A single quote is represented
     // within a string as two successive single quotes, e.g., O’HARA =
@@ -272,7 +267,7 @@ mod tests {
         assert_eq!(
             record,
             HeaderRecord::KeywordRecord(KeywordRecord::new(
-                Keyword::Unrecognized("SCALE_U".to_string()),
+                Keyword::Unrecognized("SCALE_U".into()),
                 Value::Real(0.00116355283466f64),
                 Option::Some("Upper-bound index scale (radians).")
             ))
@@ -382,7 +377,7 @@ mod tests {
     fn parse_unrecognized_keywords() {
         let data = "SCALE_U ".as_bytes();
         let (_, k) = keyword_field(data).unwrap();
-        assert_eq!(k, Keyword::Unrecognized("SCALE_U".to_string()))
+        assert_eq!(k, Keyword::Unrecognized("SCALE_U".into()))
     }
 
     #[test]

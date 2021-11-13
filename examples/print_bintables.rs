@@ -4,6 +4,8 @@
 
 use std::{env, fs::File, io::Read};
 
+use fits_rs::types::BinTable;
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     let filename = &args[1];
@@ -15,7 +17,10 @@ fn main() {
     match fits_rs::parser::parse(&buffer) {
         Ok(fits) => {
             for hdu in &fits.hdu {
-                println!("{}", hdu.header)
+
+                let r = BinTable::new(&hdu.header);
+                println!("{}", hdu.header);
+                println!("{:#?}", r);
             }
         }
         Err(e) => match e {

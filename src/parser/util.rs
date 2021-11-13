@@ -44,3 +44,8 @@ where
         |t| (t.0, t.2),
     )
 }
+
+pub(crate) fn is_ascii_text_char(chr: u8) -> bool {
+    // Space - '~'
+    (32u8..=126u8).contains(&chr)
+}
