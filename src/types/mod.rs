@@ -14,3 +14,4 @@ pub use keyword::Keyword;
 pub use extension::BinType;
 pub use extension::BinForm;
 pub use extension::BinTable;
+pub use extension::TableError;

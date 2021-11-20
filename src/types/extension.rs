@@ -76,6 +76,12 @@ pub struct BinForm {
     pub bintype: BinType,
 }
 
+impl BinForm {
+    pub fn size(self) -> usize {
+        self.repeat as usize * self.bintype.size() as usize
+    }
+}
+
 /// A code indicating the type of a bintable field
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BinType {
@@ -152,12 +158,11 @@ impl BinType {
 
 #[derive(Debug)]
 pub struct BinTable<'a> {
-    rows: usize,        // NAXIS1
-    cols: usize,        // NAXIS2
-    heap_size: usize, // PCOUNT is number of bytes that follow the table
-    tform: Vec<BinForm>,
-
-    ttype: Option<Vec<&'a str>>,
+    pub rows: usize,      // NAXIS1
+    pub cols: usize,      // NAXIS2
+    pub heap_size: usize, // PCOUNT is number of bytes that follow the table
+    pub tform: Vec<BinForm>,
+    pub ttype: Option<Vec<&'a str>>,
     tunit: Option<Vec<&'a str>>,
 
     // not used with A L or X
@@ -216,7 +221,10 @@ fn get_value<'a>(header: &Header<'a>, keyword: Keyword) -> Result<Value<'a>, Tab
 impl<'a> BinTable<'a> {
     pub fn new(header: &Header<'a>) -> Result<BinTable<'a>, TableError<'a>> {
         // Verify required values for a BINTABLE
-        if get_str(header, Keyword::XTENSION)? != "BINTABLE" {
+        if get_str(header, Keyword::XTENSION)
+            .map(|v| v != "BINTABLE")
+            .map_err(|_| TableError::IncorrectExtension)?
+        {
             return Err(TableError::IncorrectExtension);
         }
         let bitpix = get_value(header, Keyword::BITPIX)?;
@@ -232,8 +240,8 @@ impl<'a> BinTable<'a> {
             return Err(TableError::UnexpectedValue(Keyword::GCOUNT, gcount));
         }
 
-        let rows = get_uint(header, Keyword::NAXISn(1))? as usize;
-        let cols = get_uint(header, Keyword::NAXISn(2))? as usize;
+        let cols = get_uint(header, Keyword::NAXISn(1))? as usize;
+        let rows = get_uint(header, Keyword::NAXISn(2))? as usize;
         let heap_size = get_uint(header, Keyword::PCOUNT)? as usize;
 
         let tfields = get_uint(header, Keyword::TFIELDS)? as u16;
@@ -280,5 +288,9 @@ impl<'a> BinTable<'a> {
             theap,
             tdim: None,
         })
+    }
+
+    pub fn row_width(&self) -> usize {
+        self.tform.iter().map(|bf| bf.size()).sum()
     }
 }
